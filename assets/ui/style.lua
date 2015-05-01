@@ -16,6 +16,12 @@ return {
 		text_color = { 0xff, 0xfd, 0xfa, 255 },
 	}},
 
+	{ "#file_browser", {
+		visible = false,
+		background_color = { 50, 60, 90, 200 },
+		padding = 5,
+	}},
+
 	{ "#toolbar", {
 		position = "absolute",
 		left = 0,

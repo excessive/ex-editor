@@ -8,11 +8,11 @@ return {
 		-- { "button", value="Save",    id="file_save" },
 		{ "button", value="Connect Remote", id="file_connect" },
 		{ "button", value="Connect Local", id="file_connect_local" },
-		-- { "button", value="Start Server", id="file_server" },
 		{ "button", value="Exit",    id="file_exit" },
 	},
 	{ "inline", id="asset_menu", class="menu",
+		{ "button", value="List",   id="asset_list" },
 		{ "button", value="Add",    id="asset_add" },
-		-- { "button", value="Move",   id="asset_move" },
 	},
+	{ "file_browser", id="file_browser" },
 }

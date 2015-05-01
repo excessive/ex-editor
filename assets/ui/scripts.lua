@@ -26,21 +26,3 @@ for _, element in ipairs(elements) do
 		end
 	end
 end
-
-local asset_add = gui:get_element_by_id("asset_add")
-function asset_add:on_mouse_clicked(button)
-	local entity      = {
-		position_x    = love.math.random(-5, 5),
-		position_y    = love.math.random(-5, 5),
-		position_z    = love.math.random(-5, 5),
-		orientation_x = love.math.random(-1, 1),
-		orientation_y = love.math.random(-1, 1),
-		orientation_z = love.math.random(-1, 1),
-		orientation_w = 0,
-		scale_x       = love.math.random(1, 3),
-		scale_y       = love.math.random(1, 3),
-		scale_z       = love.math.random(1, 3),
-		model_path    = "player",
-	}
-	Signal.emit('client-send', entity, "spawn_entity")
-end

@@ -161,6 +161,7 @@ function console.load(font, keyRepeat, inputCallback)
 	console.colors["D"] = {r = 235, g = 197, b =  50, a = 255}
 	console.colors["E"] = {r = 222, g =  69, b =  61, a = 255}
 	console.colors["C"] = {r = 150, g = 150, b = 150, a = 255}
+	console.colors["P"] = {r = 200, g = 200, b = 200, a = 255}
 
 	console.colors["background"] = {r = 23, g = 55, b = 86, a = 240}
 	console.colors["editing"]    = {r = 80, g = 140, b = 200, a = 200}
@@ -641,6 +642,8 @@ function console.defaultInputCallback(input)
 	end
 end
 
+local original_print = print
+
 function a(str, level)
 	str = tostring(str)
 	for _, str in ipairs(string_split(str, "\n")) do
@@ -652,8 +655,22 @@ function a(str, level)
 		table.insert(console.logs, #console.logs + 1, {level = level, msg = msg})
 		console.lastLine = #console.logs
 		console.firstLine = console.lastLine - console.linesPerConsole
-		print(msg)
+		original_print(msg)
 	end
+end
+
+print = function(...)
+	local str = ""
+	local num = select("#", ...)
+	for i = 1, num do
+		str = str .. tostring(select(i, ...))
+		if i < num then
+			local len = utf8.len(str) + 1
+			local tab = 8
+			str = str .. string.rep(" ", tab - len % tab)
+		end
+	end
+	a(str, "P")
 end
 
 -- auto-initialize so that console.load() is optional

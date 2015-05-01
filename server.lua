@@ -40,10 +40,12 @@ print = function(...)
 	for i = 1, num do
 		str = str .. tostring(select(i, ...))
 		if i < num then
-			str = str .. "\t"
+			local len = utf8.len(str) + 1
+			local tab = 8
+			str = str .. string.rep(" ", tab - len % tab)
 		end
 	end
-	console.i(str)
+	a(str, "P")
 end
 
 local function main()

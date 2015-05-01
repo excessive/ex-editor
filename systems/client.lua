@@ -30,6 +30,7 @@ return function(world)
 
 	function client_system:connect(host, port)
 		self.world:activate(self)
+		self.world:clearEntities()
 
 		self.connection = lube.enetClient()
 		self.connection.handshake = "ドキドキ"
