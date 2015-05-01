@@ -5,7 +5,6 @@ return function(world)
 	cache_system.scan   = { "position", "orientation", "scale", "velocity", "rot_velocity" }
 	cache_system.filter = tiny.requireOne(unpack(cache_system.scan))
 	cache_system.cache  = {}
-	cache_system.world  = world
 
 	function cache_system:onAdd(entity)
 		self.cache[entity] = {}
@@ -25,8 +24,8 @@ return function(world)
 			for _, key in ipairs(self.scan) do
 				if entity[key] ~= self.cache[entity][key] then
 					entity.needs_update = true
-					self.world:removeEntity(entity)
-					self.world:addEntity(entity)
+					world:removeEntity(entity)
+					world:addEntity(entity)
 				end
 			end
 		end

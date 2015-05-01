@@ -95,7 +95,7 @@ function Camera:rotateXY(mx, my)
 
 	-- important: y, then x
 	rotate_camera(self.direction, mouse_direction.y, axis)
-	rotate_camera(self.direction, mouse_direction.x, cpml.vec3(0, 0, 1))
+	rotate_camera(self.direction, mouse_direction.x, self.up)
 end
 
 -- Figure out the view matrix

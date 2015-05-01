@@ -39,7 +39,7 @@ return function(world)
 
 		local connected, err = self.connection:connect(self.host, tonumber(self.port), true)
 		if connected then
-			console.i("Connected to %s:%s", self.host, self.port)
+			console.i("Connecting to %s:%s", self.host, self.port)
 			Signal.emit("client-connected", self.connection)
 		else
 			console.i(err)
@@ -78,11 +78,11 @@ return function(world)
 				return
 			end
 
-			self.recvcommands[map.name](self, cdata:decode(map.name, data))
+			self["recv_"..map.name](self, cdata:decode(map.name, data))
 		end
 	end
 
-	function client_system.recvcommands:client_action(data)
+	function client_system:recv_client_action(data)
 		if actions[action] then
 			local state = Gamestate:current()
 			state["action_"..actions[action]](state, id)
@@ -91,11 +91,11 @@ return function(world)
 		end
 	end
 
-	function client_system.recvcommands:acquire_entities(data)
-		client_system.recvcommands:spawn_entity(data)
+	function client_system:recv_acquire_entities(data)
+		self:recv_spawn_entity(data)
 	end
 
-	function client_system.recvcommands:spawn_entity(data)
+	function client_system:recv_spawn_entity(data)
 		local entity            = Entity(require("assets.models."..ffi.string(data.model_path)))
 		entity.id               = tonumber(data.id)
 		entity.position         = cpml.vec3(data.position_x,    data.position_y,    data.position_z)
@@ -107,18 +107,18 @@ return function(world)
 		entity.real_orientation = orientation
 		entity.replicate        = true
 
-		client_system.world:addEntity(entity)
-		client_system.cache[entity.id] = entity
+		self.world:addEntity(entity)
+		self.cache[entity.id] = entity
 	end
 
-	function client_system.recvcommands:despawn_entity(data)
-		local entity = client_system.cache[tonumber(data.id)]
-		client_system.world:removeEntity(entity)
+	function client_system:recv_despawn_entity(data)
+		local entity = self.cache[tonumber(data.id)]
+		self.world:removeEntity(entity)
 	end
 
-	function client_system.recvcommands:update_entity(data)
+	function client_system:recv_update_entity(data)
 		-- Process data
-		local entity       = client_system.cache[tonumber(data.id)]
+		local entity       = self.cache[tonumber(data.id)]
 		local position     = cpml.vec3(data.position_x,     data.position_y,     data.position_z)
 		local orientation  = cpml.quat(data.orientation_x,  data.orientation_y,  data.orientation_z,  data.orientation_w)
 		local velocity     = cpml.vec3(data.velocity_x,     data.velocity_y,     data.velocity_z)
@@ -128,19 +128,17 @@ return function(world)
 		if not entity then return end
 
 		-- Only update entities that are not me or locked by me
-		if entity.id ~= client_system.id and entity.lock ~= client_system.id then
+		if entity.id ~= self.id and entity.lock ~= self.id then
 			-- Determine latency
-			local peer   = client_system.connection.peer
+			local peer   = self.connection.peer
 			local ping   = peer:round_trip_time() / 1000 / 2
 
 			-- Compensate for latency
 			position      = position      + velocity * ping
-
-			-- I'm pretty sure this won't work right.
-			orientation.x = orientation.x + rot_velocity.x * ping
-			orientation.y = orientation.y + rot_velocity.y * ping
-			orientation.z = orientation.z + rot_velocity.z * ping
-			orientation.w = orientation.w + rot_velocity.w * ping
+			--orientation.x = orientation.x + rot_velocity.x * ping
+			--orientation.y = orientation.y + rot_velocity.y * ping
+			--orientation.z = orientation.z + rot_velocity.z * ping
+			--orientation.w = orientation.w + rot_velocity.w * ping
 
 			-- Assign data
 			entity.real_position    = position     or entity.real_position
@@ -151,12 +149,12 @@ return function(world)
 		end
 	end
 
-	function client_system.recvcommands:possess_entity(data)
-		client_system.id = tonumber(data.id)
-		Signal.emit("client-id", client_system.id)
+	function client_system:recv_possess_entity(data)
+		self.id = tonumber(data.id)
+		Signal.emit("client-id", self.id)
 
 		-- Possessing another entity? Not any more!
-		for _, entity in pairs(client_system.cache) do
+		for _, entity in pairs(self.cache) do
 			if entity.possessed then
 				entity.possessed = nil
 				break
@@ -164,10 +162,10 @@ return function(world)
 		end
 
 		-- Possess a new entity!
-		local entity     = client_system.cache[client_system.id]
+		local entity     = self.cache[self.id]
 		entity.possessed = true
-		client_system.world:removeEntity(entity)
-		client_system.world:addEntity(entity)
+		self.world:removeEntity(entity)
+		self.world:addEntity(entity)
 	end
 
 	Signal.register('client-connect',    function(...) client_system:connect(...) end)

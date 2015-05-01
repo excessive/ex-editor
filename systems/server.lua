@@ -39,7 +39,7 @@ return function(world)
 		self.connection:setPing(true, 6, "プリキュア\n")
 
 		self.connection:listen(tonumber(port))
-		console.i("Server started on port %s", port)
+		console.i("Server starting on port %s", port)
 
 		function self.connection.callbacks.recv(d, id) self:recv(d, id) end
 		function self.connection.callbacks.connect(id) self:connect(id) end
@@ -53,7 +53,7 @@ return function(world)
 	function server_system:connect(client_id)
 		console.i("Client %s connected", tostring(client_id))
 
-		self.recvcommands:acquire_entities(client_id)
+		self:recv_acquire_entities(client_id)
 
 		-- Generate unique ID
 		self.id = self.id + 1
@@ -66,17 +66,17 @@ return function(world)
 			position_z    = 0,
 			orientation_x = 0,
 			orientation_y = 0,
-			orientation_z = 0,
-			orientation_w = 1,
+			orientation_z = 1,
+			orientation_w = 0,
 			scale_x       = 1,
 			scale_y       = 1,
 			scale_z       = 1,
 			model_path    = "player",
 		}
-		self.recvcommands:spawn_entity(data, client_id)
+		self:recv_spawn_entity(data, client_id)
 
 		-- Tell client to possess new entity
-		self.recvcommands:possess_entity(data, client_id)
+		self:recv_possess_entity(data, client_id)
 	end
 
 	function server_system:disconnect(client_id)
@@ -85,7 +85,7 @@ return function(world)
 		for _, entity in pairs(self.cache) do
 			if entity.possessed == tonumber(client_id) then
 				local data = { id = entity.id }
-				self.recvcommands:despawn_entity(data, client_id)
+				self:recv_despawn_entity(data, client_id)
 			end
 		end
 	end
@@ -104,12 +104,12 @@ return function(world)
 				return
 			end
 
-			self.recvcommands[map.name](self, cdata:decode(map.name, data), client_id)
+			self["recv_"..map.name](self, cdata:decode(map.name, data), client_id)
 		end
 	end
 
-	function server_system.recvcommands:client_action(data, client_id)
-		local entity = server_system.cache[tonumber(data.id)]
+	function server_system:recv_client_action(data, client_id)
+		local entity = self.cache[tonumber(data.id)]
 
 		if action == actions.select then
 			-- set locked flag of target to player's id
@@ -118,16 +118,16 @@ return function(world)
 			data.type     = packets.client_action
 			local struct  = cdata:set_struct("client_action", data)
 			local encoded = cdata:encode(struct)
-			server_system.connection:send(encoded)
+			self.connection:send(encoded)
 		end
 	end
 
-	function server_system.recvcommands:acquire_entities(client_id)
+	function server_system:recv_acquire_entities(client_id)
 		local data = {
 			type = packets.acquire_entities
 		}
 
-		for _, entity in pairs(server_system.cache) do
+		for _, entity in pairs(self.cache) do
 			data.id            = entity.id
 			data.position_x    = entity.position.x
 			data.position_y    = entity.position.y
@@ -143,11 +143,11 @@ return function(world)
 
 			local struct  = cdata:set_struct("acquire_entities", data)
 			local encoded = cdata:encode(struct)
-			server_system.connection:send(encoded, client_id)
+			self.connection:send(encoded, client_id)
 		end
 	end
 
-	function server_system.recvcommands:spawn_entity(data, client_id)
+	function server_system:recv_spawn_entity(data, client_id)
 		local entity = {}
 
 		-- Check ID
@@ -169,29 +169,29 @@ return function(world)
 		entity.replicate    = true
 
 		-- Cache new entity
-		server_system.world:addEntity(entity)
-		server_system.cache[entity.id] = entity
-		print(server_system.cache[entity.id], entity.id)
+		self.world:addEntity(entity)
+		self.cache[entity.id] = entity
+		console.d("Spawned entity %s (%s)", entity.id, self.cache[entity.id])
 
 		-- Send data
 		data.type     = packets.spawn_entity
 		local struct  = cdata:set_struct("spawn_entity", data)
 		local encoded = cdata:encode(struct)
-		server_system.connection:send(encoded)
+		self.connection:send(encoded)
 	end
 
-	function server_system.recvcommands:despawn_entity(data, client_id)
-		local entity = server_system.cache[tonumber(data.id)]
-		server_system.world:removeEntity(entity)
+	function server_system:recv_despawn_entity(data, client_id)
+		local entity = self.cache[tonumber(data.id)]
+		self.world:removeEntity(entity)
 
 		data.type     = packets.despawn_entity
 		local struct  = cdata:set_struct("despawn_entity", data)
 		local encoded = cdata:encode(struct)
-		server_system.connection:send(encoded)
+		self.connection:send(encoded)
 	end
 
-	function server_system.recvcommands:update_entity(data, client_id)
-		local entity = server_system.cache[tonumber(data.id)]
+	function server_system:recv_update_entity(data, client_id)
+		local entity = self.cache[tonumber(data.id)]
 
 		if not entity then return end
 
@@ -203,16 +203,16 @@ return function(world)
 		local scale        = cpml.vec3(data.scale_x,        data.scale_y,        data.scale_z)
 
 		-- Determine latency
-		local server = server_system.connection.socket
+		local server = self.connection.socket
 		local peer   = server:get_peer(client_id)
 		local ping   = peer:round_trip_time() / 1000 / 2
 
 		-- Compensate for latency
 		position      = position      + velocity * ping
-		orientation.x = orientation.x + rot_velocity.x * ping
-		orientation.y = orientation.y + rot_velocity.y * ping
-		orientation.z = orientation.z + rot_velocity.z * ping
-		orientation.w = orientation.w + rot_velocity.w * ping
+		--orientation.x = orientation.x + rot_velocity.x * ping
+		--orientation.y = orientation.y + rot_velocity.y * ping
+		--orientation.z = orientation.z + rot_velocity.z * ping
+		--orientation.w = orientation.w + rot_velocity.w * ping
 
 		-- Assign data
 		entity.position     = position
@@ -244,12 +244,12 @@ return function(world)
 		-- Send data
 		local struct  = cdata:set_struct("update_entity", data)
 		local encoded = cdata:encode(struct)
-		server_system.connection:send(encoded)
+		self.connection:send(encoded)
 	end
 
-	function server_system.recvcommands:possess_entity(data, client_id)
+	function server_system:recv_possess_entity(data, client_id)
 		-- Possessing another entity? Not any more!
-		for _, entity in pairs(server_system.cache) do
+		for _, entity in pairs(self.cache) do
 			if entity.possessed == tonumber(client_id) then
 				entity.possessed = nil
 				break
@@ -257,19 +257,16 @@ return function(world)
 		end
 
 		-- Possess a new entity!
-		local entity     = server_system.cache[tonumber(data.id)]
+		local entity     = self.cache[tonumber(data.id)]
 		entity.possessed = tonumber(client_id)
-		server_system.world:removeEntity(entity)
-		server_system.world:addEntity(entity)
+		self.world:removeEntity(entity)
+		self.world:addEntity(entity)
 
 		data.type     = packets.possess_entity
 		local struct  = cdata:set_struct("possess_entity", data)
 		local encoded = cdata:encode(struct)
-		server_system.connection:send(encoded, client_id)
+		self.connection:send(encoded, client_id)
 	end
-
-	Signal.register('server-start', function(...) server_system:start(...) end)
-	Signal.register('server-stop',  function(...) server_system:stop(...) end)
 
 	return server_system
 end

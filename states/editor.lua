@@ -18,20 +18,15 @@ return function()
 		self.world:addSystem(require("systems.input")(self.world))
 		self.world:addSystem(require("systems.movement")(camera))
 
-		local server = require("systems.server")(self.world)
-		self.world:addSystem(server)
-		self.world:deactivate(server)
-
 		local client = require("systems.client")(self.world)
 		self.world:addSystem(client)
 		self.world:deactivate(client)
+		client:connect("localhost")
 
 		self.world:addSystem(require("systems.client_update")(self.world))
 
 		self.world:addSystem(require("systems.render")(camera))
 		self.world:addSystem(self.gui_system)
-
-		self.world:addEntity(Entity(require "assets.models.tsubasa"))
 	end
 
 	function state:leave()

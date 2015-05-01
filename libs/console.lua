@@ -160,10 +160,12 @@ function console.load(font, keyRepeat, inputCallback)
 	console.colors["I"] = {r = 251, g = 241, b = 213, a = 255}
 	console.colors["D"] = {r = 235, g = 197, b =  50, a = 255}
 	console.colors["E"] = {r = 222, g =  69, b =  61, a = 255}
+	console.colors["C"] = {r = 150, g = 150, b = 150, a = 255}
 
-	console.colors["background"] = 	{r = 23, g = 55, b = 86, a = 240}
-	console.colors["input"]      = 	{r = 23, g = 55, b = 86, a = 255}
-	console.colors["default"]    = 	{r = 215, g = 213, b = 174, a = 255}
+	console.colors["background"] = {r = 23, g = 55, b = 86, a = 240}
+	console.colors["editing"]    = {r = 80, g = 140, b = 200, a = 200}
+	console.colors["input"]      = {r = 23, g = 55, b = 86, a = 255}
+	console.colors["default"]    = {r = 215, g = 213, b = 174, a = 255}
 
 	console.inputCallback = inputCallback or console.defaultInputCallback
 
@@ -181,7 +183,7 @@ function console.setMotd(message)
 	console.motd = message
 end
 
-function console.resize( w, h )
+function console.resize(w, h)
 	console.w, console.h = w, h / console.height_divisor
 	console.y = console.lineHeight - console.lineHeight * console.lineSpacing
 
@@ -193,12 +195,101 @@ function console.resize( w, h )
 	console.lastLine = console.firstLine + console.linesPerConsole
 end
 
+function console.textedit(t, s, l)
+	if t == "" then
+		console.editBuffer = nil
+	else
+		console.editBuffer = { text = t, sel = s }
+	end
+end
+
 function console.textinput(t)
 	if t ~= console._KEY_TOGGLE and console.visible then
 		console.input = console.input .. t
 		return true
 	end
 	return false
+end
+
+-- From: https://raw.githubusercontent.com/alexander-yakushev/awesompd/master/utf8.lua
+local utf8 = {}
+
+function utf8.charbytes (s, i)
+	-- argument defaults
+	i = i or 1
+	local c = string.byte(s, i)
+
+	-- determine bytes needed for character, based on RFC 3629
+	if c > 0 and c <= 127 then
+		-- UTF8-1
+		return 1
+	elseif c >= 194 and c <= 223 then
+		-- UTF8-2
+		local c2 = string.byte(s, i + 1)
+		return 2
+	elseif c >= 224 and c <= 239 then
+		-- UTF8-3
+		local c2 = s:byte(i + 1)
+		local c3 = s:byte(i + 2)
+		return 3
+	elseif c >= 240 and c <= 244 then
+		-- UTF8-4
+		local c2 = s:byte(i + 1)
+		local c3 = s:byte(i + 2)
+		local c4 = s:byte(i + 3)
+		return 4
+	end
+end
+
+-- returns the number of characters in a UTF-8 string
+function utf8.len (s)
+	local pos = 1
+	local bytes = string.len(s)
+	local len = 0
+	while pos <= bytes and len ~= chars do
+		local c = string.byte(s,pos)
+		len = len + 1
+
+		pos = pos + utf8.charbytes(s, pos)
+	end
+	if chars ~= nil then
+		return pos - 1
+	end
+	return len
+end
+
+-- functions identically to string.sub except that i and j are UTF-8 characters
+-- instead of bytes
+function utf8.sub(s, i, j)
+	j = j or -1
+	if i == nil then
+		return ""
+	end
+	local pos = 1
+	local bytes = string.len(s)
+	local len = 0
+	-- only set l if i or j is negative
+	local l = (i >= 0 and j >= 0) or utf8.len(s)
+	local startChar = (i >= 0) and i or l + i + 1
+	local endChar = (j >= 0) and j or l + j + 1
+	-- can't have start before end!
+	if startChar > endChar then
+		return ""
+	end
+	-- byte offsets to pass to string.sub
+	local startByte, endByte = 1, bytes
+	while pos <= bytes do
+		len = len + 1
+		if len == startChar then
+	 		startByte = pos
+		end
+		pos = pos + utf8.charbytes(s, pos)
+		if len == endChar then
+	 		endByte = pos - 1
+	 		break
+		end
+	end
+	return string.sub(s, startByte, endByte)
 end
 
 function console.keypressed(key)
@@ -213,15 +304,15 @@ function console.keypressed(key)
 		return valid
 	end
 	if key ~= console._KEY_TOGGLE and console.visible then
-		if key == console._KEY_SUBMIT then
+		if key == console._KEY_SUBMIT and not console.editBuffer then
 			local msg = console.input
 			if push_history() then
 				console.inputCallback(msg)
 			end
 		elseif key == console._KEY_CLEAR then
 			console.input = ""
-		elseif key == console._KEY_DELETE then
-			console.input = string.sub(console.input, 0, #console.input - 1)
+		elseif key == console._KEY_DELETE and not console.editBuffer then
+			console.input = utf8.sub(console.input, 1, utf8.len(console.input) - 1)
 		end
 
 		-- history traversal
@@ -249,13 +340,18 @@ function console.keypressed(key)
 
 		return true
 	elseif key == console._KEY_TOGGLE then
+		-- IME support stuff.
+		if console.visible and (love.keyboard.isDown("lalt") or love.keyboard.isDown("ralt")) then
+			return true
+		end
 		console.visible = not console.visible
+		love.keyboard.setTextInput(console.visible)
 		return true
 	end
 	return false
 end
 
-function console.update( dt )
+function console.update(dt)
 	console.delta = console.delta + dt
 end
 
@@ -279,8 +375,31 @@ function console.draw()
 	color = console.colors.default
 	love.graphics.setColor(cc(color.r, color.g, color.b, color.a))
 	love.graphics.setFont(console.font)
-	love.graphics.print(console.ps .. " " .. console.input, console.x + console.margin, console.y + console.h + (console.lineHeight - console.fontSize) / 2 -1 )
+	local current = console.ps .. " " .. console.input
+	local x, y = console.x + console.margin, console.y + console.h + (console.lineHeight - console.fontSize) / 2 -1
+	local h = console.font:getHeight()
+	love.graphics.print(current, x, y)
+	local pos = console.font:getWidth(current)
+	local cursor_pos = pos
+	if console.editBuffer then
+		local buf = console.editBuffer
+		local w = console.font:getWidth(buf.text)
+		local edit = console.colors.editing
+		cursor_pos = cursor_pos + w
+		love.keyboard.setTextInput(true, pos, y, w, h) -- NOTE: Added in Love 0.10
+		love.graphics.setColor(cc(edit.r, edit.g, edit.b, edit.a))
+		love.graphics.rectangle("fill", x + pos, y, w, h)
+		love.graphics.setColor(cc(color.r, color.g, color.b, color.a))
+		love.graphics.print(buf.text, x + pos, y)
+	end
+	if math.floor(console.delta * 2) % 2 == 0 then
+		love.graphics.setColor(cc(color.r, color.g, color.b, color.a))
+	else
+		love.graphics.setColor(cc(color.r, color.g, color.b, 0))
+	end
+	love.graphics.rectangle("fill", x + cursor_pos, y, 2, h)
 
+	love.graphics.setColor(cc(color.r, color.g, color.b, color.a))
 	if console.firstLine > 0 then
 		love.graphics.polygon("fill", up(console.x + console.w - console.margin - (console.margin * 0.3), console.y + console.margin, console.margin))
 	end
@@ -302,33 +421,68 @@ function console.draw()
 	love.graphics.setColor(cc(r, g, b, a))
 end
 
-function console.mousepressed( x, y, button )
+local function in_window(x, y)
+	if not (x >= console.x and x <= (console.x + console.w)) then
+		return false
+	end
+	if not (y >= console.y and y <= (console.y + console.h + console.lineHeight)) then
+		return false
+	end
+	return true
+end
+
+-- eat all mouse events over the console
+function console.mousemoved(x, y, rx, ry)
 	if not console.visible then
 		return false
 	end
 
-	if not (x >= console.x and x <= (console.x + console.w)) then
+	local x, y = love.mouse.getPosition()
+
+	if not in_window(x, y) then
 		return false
 	end
 
-	if not (y >= console.y and y <= (console.y + console.h + console.lineHeight)) then
+	return true
+end
+
+function console.wheelmoved(wx, wy)
+	if not console.visible then
+		return false
+	end
+
+	local x, y = love.mouse.getPosition()
+
+	if not in_window(x, y) then
 		return false
 	end
 
 	local consumed = false
 
-	if button == "wu" then
+	if wy == 1 then
 		console.firstLine = math.max(0, console.firstLine - 1)
 		consumed = true
 	end
 
-	if button == "wd" then
+	if wy == -1 then
 		console.firstLine = math.min(#console.logs - console.linesPerConsole, console.firstLine + 1)
 		consumed = true
 	end
 	console.lastLine = console.firstLine + console.linesPerConsole
 
 	return consumed
+end
+
+function console.mousepressed(x, y, button)
+	if not console.visible then
+		return false
+	end
+
+	if not in_window(x, y) then
+		return false
+	end
+
+	return true
 end
 
 function console.d(fmt, ...)
@@ -477,6 +631,7 @@ end
 
 function console.defaultInputCallback(input)
 	local commands = string_split(input, ";")
+	a(input, 'C')
 
 	for _, line in ipairs(commands) do
 		local args = merge_quoted(string_split(trim(line), " "))
@@ -489,10 +644,15 @@ end
 function a(str, level)
 	str = tostring(str)
 	for _, str in ipairs(string_split(str, "\n")) do
-		table.insert(console.logs, #console.logs + 1, {level = level, msg = string.format("%07.02f [".. level .. "] %s", console.delta, str)})
+		local msg = string.format("%07.02f [".. level .. "] %s", console.delta, str)
+		-- XXX: This is totally inflexible.
+		if level == "C" then
+			msg = string.format("%07.02f -> %s", console.delta, str)
+		end
+		table.insert(console.logs, #console.logs + 1, {level = level, msg = msg})
 		console.lastLine = #console.logs
 		console.firstLine = console.lastLine - console.linesPerConsole
-		print(console.logs[console.lastLine].msg)
+		print(msg)
 	end
 end
 

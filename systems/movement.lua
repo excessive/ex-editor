@@ -4,16 +4,19 @@ local cpml = require "libs.cpml"
 return function(camera)
 	local movement_system  = tiny.processingSystem()
 	movement_system.filter = tiny.requireAll("position", "orientation", "velocity", "rot_velocity")
-	movement_system.camera = camera
-	movement_system.prevx, movement_system.prevy = love.mouse.getPosition()
 
-	Signal.register('client-id', function(id) movement_system.id = id end)
+	-- Only used client-side
+	if camera then
+		movement_system.camera = camera
+		movement_system.prevx, movement_system.prevy = love.mouse.getPosition()
+		Signal.register('client-id', function(id) movement_system.id = id end)
+	end
 
 	function movement_system:process(entity, dt)
 		entity.position    = entity.position    + entity.velocity * dt
 		entity.orientation = entity.orientation + entity.rot_velocity * dt
 
-		if entity.possessed == true then
+		if camera and entity.possessed == true then
 			local w, h = love.graphics.getDimensions()
 			local mx, my = love.mouse.getPosition()
 			local dx, dy = self.prevx - mx, self.prevy - my

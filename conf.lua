@@ -1,6 +1,6 @@
 function love.conf(t)
 	t.identity              = nil
-	t.version               = "0.9.2"
+	t.version               = "0.10.0"
 	t.console               = false
 
 	t.window.title          = "Ex Editor"
@@ -14,7 +14,7 @@ function love.conf(t)
 	t.window.fullscreen     = false
 	t.window.fullscreentype = "desktop"
 	t.window.vsync          = true
-	t.window.fsaa           = 4
+	t.window.msaa           = 4
 	t.window.display        = 1
 	t.window.highdpi        = false
 	t.window.srgb           = true
