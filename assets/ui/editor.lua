@@ -14,5 +14,5 @@ return {
 		{ "button", value="List",   id="asset_list" },
 		{ "button", value="Add",    id="asset_add" },
 	},
-	{ "file_browser", id="file_browser" },
+	{ "file_browser", id="file_browser", title="Assets" },
 }

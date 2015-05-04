@@ -1,8 +1,21 @@
-require("libs.love3d").import(true) -- prepare your body, love2d
+love.filesystem.setRequirePath(love.filesystem.getRequirePath() .. ";libs/?.lua;libs/?/init.lua")
 
-Gamestate = require "libs.hump.gamestate"
-Signal    = require "libs.hump.signal"
-console   = require "libs.console"
+-- local all_requires = {}
+-- local real_require = require
+-- require = function(...)
+-- 	local path = select(1, ...)
+-- 	if not all_requires[path] then
+-- 		print(...)
+-- 		all_requires[path] = true
+-- 	end
+-- 	return real_require(...)
+-- end
+
+require("love3d").import(true) -- prepare your body, love2d
+
+Gamestate = require "hump.gamestate"
+Signal    = require "hump.signal"
+console   = require "console"
 
 local default_callbacks = {
 	errhand = love.errhand
@@ -50,13 +63,10 @@ function love.update(dt)
 	love.window.setTitle(string.format("Ex Editor (FPS: %0.2f, MSPF: %0.3f)", love.timer.getFPS(), love.timer.getAverageDelta() * 1000))
 	local s = output:pop()
 	while s do
-		console[s:sub(1,1)](s:sub(2))
+		(console[s:sub(1,1)] or console.e)(s:sub(2))
 		s = output:pop()
 	end
-end
 
-function love.draw()
-	local dt = love.timer.getDelta()
 	local state = Gamestate.current()
 	if state.world then
 		state.world:update(dt)
@@ -104,15 +114,13 @@ function love.run()
 		end
 
 		-- Call update and draw
-		if love.update then
-			console.update(dt) -- make sure the console is always updated
-			love.update(dt) -- will pass 0 if love.timer is disabled
-		end
-
 		if love.graphics and love.graphics.isActive() then
 			love.graphics.clear(love.graphics.getBackgroundColor())
 			love.graphics.origin()
-			if love.draw then love.draw() end
+
+			console.update(dt) -- make sure the console is always updated
+			love.update(dt) -- will pass 0 if love.timer is disabled
+
 			if console then console.draw() end
 			love.graphics.present()
 		end

@@ -1,7 +1,7 @@
-local tiny = require "libs.tiny"
+local tiny = require "tiny"
 
 return function(world)
-	local cache_system  = tiny.system()
+	local cache_system  = tiny.processingSystem()
 	cache_system.scan   = { "position", "orientation", "scale", "velocity", "rot_velocity" }
 	cache_system.filter = tiny.requireOne(unpack(cache_system.scan))
 	cache_system.cache  = {}
@@ -19,14 +19,12 @@ return function(world)
 		self.cache[entity] = nil
 	end
 
-	function cache_system:update(entities, dt)
-		for _, entity in ipairs(entities) do
-			for _, key in ipairs(self.scan) do
-				if entity[key] ~= self.cache[entity][key] then
-					entity.needs_update = true
-					world:removeEntity(entity)
-					world:addEntity(entity)
-				end
+	function cache_system:process(entity, dt)
+		for _, key in ipairs(self.scan) do
+			if entity[key] ~= self.cache[entity][key] then
+				entity.needs_update = true
+				world:removeEntity(entity)
+				world:addEntity(entity)
 			end
 		end
 	end

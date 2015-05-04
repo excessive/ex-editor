@@ -6,7 +6,7 @@ local function define(name, id)
 	actions[id] = name
 end
 
-define("shoot", 1)
-define("disconnect", 7)
+define("lock", 1)
+define("unlock", 2)
 
 return actions

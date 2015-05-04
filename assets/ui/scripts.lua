@@ -26,3 +26,53 @@ for _, element in ipairs(elements) do
 		end
 	end
 end
+
+local windows = gui:get_elements_by_class("window")
+
+for _, window in ipairs(windows) do
+	function window:on_mouse_pressed(button)
+		if button ~= 1 then
+			return
+		end
+		self.pressed = true
+		self:bring_to_front()
+		local mx, my = love.mouse.getPosition()
+
+		-- offset within element
+		self.ox = self.position.x - self.properties.margin_left - mx
+		self.oy = self.position.y - self.properties.margin_top - my
+	end
+
+	function window:on_mouse_released(button)
+		if button == 1 then
+			self.pressed = false
+		end
+	end
+
+	function window:update(dt)
+		self:default_update(dt)
+
+		if not self.pressed then return end
+
+		local nx, ny = love.mouse.getPosition()
+		nx = nx + self.ox
+		ny = ny + self.oy
+
+		self:set_property("left", nx)
+		self:set_property("top",  ny)
+	end
+end
+
+for _, close in ipairs(gui:get_elements_by_query(".window_close")) do
+	function close:on_mouse_pressed(button)
+		if button == 1 then
+			return false
+		end
+	end
+	function close:on_mouse_clicked(button)
+		if button ~= 1 then
+			return
+		end
+		self.parent.parent:set_property("visible", false)
+	end
+end

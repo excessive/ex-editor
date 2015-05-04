@@ -1,4 +1,4 @@
-local cdata   = require "libs.cdata"
+local cdata   = require "cdata"
 local packets = {}
 
 -- all structs get a type field so we don't lose our minds.
@@ -23,12 +23,14 @@ add_struct(
 		float position_x,     position_y,     position_z;
 		float orientation_x,  orientation_y,  orientation_z,  orientation_w;
 		float scale_x,        scale_y,        scale_z;
+		uint64_t locked;
 		unsigned char model_path[64];
 	]], {
 		"id",
 		"position_x",     "position_y",     "position_z",
 		"orientation_x",  "orientation_y",  "orientation_z",  "orientation_w",
 		"scale_x",        "scale_y",        "scale_z",
+		"locked",
 		"model_path",
 	}
 )
@@ -39,12 +41,14 @@ add_struct(
 		float position_x,     position_y,     position_z;
 		float orientation_x,  orientation_y,  orientation_z,  orientation_w;
 		float scale_x,        scale_y,        scale_z;
+		uint64_t locked;
 		unsigned char model_path[64];
 	]], {
 		"id",
 		"position_x",     "position_y",     "position_z",
 		"orientation_x",  "orientation_y",  "orientation_z",  "orientation_w",
 		"scale_x",        "scale_y",        "scale_z",
+		"locked",
 		"model_path",
 	}
 )
@@ -77,6 +81,14 @@ add_struct(
 
 add_struct(
 	"possess_entity", [[
+		uint64_t id;
+	]], {
+		"id",
+	}
+)
+
+add_struct(
+	"client_whois", [[
 		uint64_t id;
 	]], {
 		"id",

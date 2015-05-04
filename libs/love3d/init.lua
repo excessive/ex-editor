@@ -1,5 +1,5 @@
 local current_folder = (...):gsub('%.init$', '') .. "."
-local cpml = require(current_folder .. "cpml")
+local cpml = require "cpml"
 local ffi = require "ffi"
 
 local l3d = {

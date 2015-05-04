@@ -1,5 +1,5 @@
-local tiny         = require "libs.tiny"
-local cpml         = require "libs.cpml"
+local tiny         = require "tiny"
+local cpml         = require "cpml"
 local packet_types = require "packet_types"
 local cdata        = packet_types.cdata
 local packets      = packet_types.packets

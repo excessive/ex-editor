@@ -1,6 +1,6 @@
-local cpml   = require "libs.cpml"
-local Class  = require "libs.hump.class"
-local iqe    = require "libs.iqe"
+local cpml   = require "cpml"
+local Class  = require "hump.class"
+local iqe    = require "iqe"
 local Entity = Class {}
 
 function Entity:init(object)
@@ -9,6 +9,7 @@ function Entity:init(object)
 	self.orientation          = object.orientation  or cpml.quat(0, 0, 0, 1)
 	self.scale                = object.scale        or cpml.vec3(1, 1, 1)
 	self.shadow_scale         = object.shadow_scale or cpml.vec3(1, 1, 1)
+	self.model_matrix         = cpml.mat4()
 	self.active_animation     = {}
 	self.active_interpolation = {}
 	self.id                   = 0

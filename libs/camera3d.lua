@@ -1,12 +1,12 @@
-local Class = require "libs.hump.class"
-local cpml = require "libs.cpml"
+local Class = require "hump.class"
+local cpml = require "cpml"
 
 local Camera = Class {}
 
 -- Camera assumes Y-forward, Z-up
 function Camera:init(position, direction)
 	self.fov  = 45
-	self.near = 0.001
+	self.near = 0.01
 	self.far  = 10.0
 
 	self.view       = cpml.mat4()
@@ -115,7 +115,7 @@ function Camera:update()
 	end
 
 	self.projection = self.projection:identity()
-	self.projection = self.projection:perspective(math.rad(self.fov), w/h, self.near, self.far)
+	self.projection = self.projection:perspective(self.fov, w/h, self.near, self.far)
 end
 
 function Camera:track(position)

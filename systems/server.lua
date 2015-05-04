@@ -1,7 +1,7 @@
 local ffi          = require "ffi"
-local tiny         = require "libs.tiny"
-local cpml         = require "libs.cpml"
-local lube         = require "libs.lube"
+local tiny         = require "tiny"
+local cpml         = require "cpml"
+local lube         = require "lube"
 local actions      = require "action_enum"
 local packet_types = require "packet_types"
 local cdata        = packet_types.cdata
@@ -26,7 +26,7 @@ return function(world)
 	function server_system:update(entities, dt)
 		if self.connection then
 			self.connection:update(dt)
-			require("libs.lovebird").update()
+			-- require("lovebird").update()
 		end
 	end
 
@@ -52,6 +52,14 @@ return function(world)
 
 	function server_system:connect(client_id)
 		console.i("Client %s connected", tostring(client_id))
+
+		local data = {
+			type = packets.client_whois,
+			id   = tonumber(client_id),
+		}
+		local struct  = cdata:set_struct("client_whois", data)
+		local encoded = cdata:encode(struct)
+		self.connection:send(encoded, client_id)
 
 		self:recv_acquire_entities(client_id)
 
@@ -83,9 +91,20 @@ return function(world)
 		console.i("Client %s disconnected", tostring(client_id))
 
 		for _, entity in pairs(self.cache) do
+			-- Remove possessed entity
 			if entity.possessed == tonumber(client_id) then
 				local data = { id = entity.id }
 				self:recv_despawn_entity(data, client_id)
+			end
+
+			-- Clear all locks
+			if entity.locked == tonumber(client_id) then
+				local data = {
+					id     = tonumber(client_id),
+					action = actions.unlock,
+					target = entity.id,
+				}
+				self:recv_action_unlock(data, client_id)
 			end
 		end
 	end
@@ -109,17 +128,35 @@ return function(world)
 	end
 
 	function server_system:recv_client_action(data, client_id)
-		local entity = self.cache[tonumber(data.id)]
-
-		if action == actions.select then
-			-- set locked flag of target to player's id
-			-- so that only that player can modify target
-
-			data.type     = packets.client_action
-			local struct  = cdata:set_struct("client_action", data)
-			local encoded = cdata:encode(struct)
-			self.connection:send(encoded)
+		if actions[data.action] then
+			self["recv_action_"..actions[data.action]](self, data, client_id)
+		else
+			console.e("Invalid action: %d", data.action or 0)
 		end
+	end
+
+	function server_system:recv_action_lock(data, client_id)
+		local entity  = self.cache[tonumber(data.target)]
+		entity.locked = tonumber(data.id)
+		self.world:removeEntity(entity)
+		self.world:addEntity(entity)
+
+		data.type     = packets.client_action
+		local struct  = cdata:set_struct("client_action", data)
+		local encoded = cdata:encode(struct)
+		self.connection:send(encoded)
+	end
+
+	function server_system:recv_action_unlock(data, client_id)
+		local entity  = self.cache[tonumber(data.target)]
+		entity.locked = nil
+		self.world:removeEntity(entity)
+		self.world:addEntity(entity)
+
+		data.type     = packets.client_action
+		local struct  = cdata:set_struct("client_action", data)
+		local encoded = cdata:encode(struct)
+		self.connection:send(encoded)
 	end
 
 	function server_system:recv_acquire_entities(client_id)
@@ -139,6 +176,7 @@ return function(world)
 			data.scale_x       = entity.scale.x
 			data.scale_y       = entity.scale.y
 			data.scale_z       = entity.scale.z
+			data.locked        = entity.locked
 			data.model_path    = entity.model_path
 
 			local struct  = cdata:set_struct("acquire_entities", data)
@@ -150,16 +188,11 @@ return function(world)
 	function server_system:recv_spawn_entity(data, client_id)
 		local entity = {}
 
-		-- Check ID
-		local id = tonumber(data.id)
-		if id == 0 then
-			-- Generate unique ID
-			self.id = self.id + 1
-			id = self.id
-		end
+		-- Generate unique ID
+		self.id  = self.id + 1
 
 		-- Assign data
-		entity.id           = id
+		entity.id           = self.id
 		entity.position     = cpml.vec3(data.position_x,    data.position_y,    data.position_z)
 		entity.orientation  = cpml.quat(data.orientation_x, data.orientation_y, data.orientation_z, data.orientation_w)
 		entity.scale        = cpml.vec3(data.scale_x,       data.scale_y,       data.scale_z)
@@ -175,6 +208,7 @@ return function(world)
 
 		-- Send data
 		data.type     = packets.spawn_entity
+		data.id       = entity.id
 		local struct  = cdata:set_struct("spawn_entity", data)
 		local encoded = cdata:encode(struct)
 		self.connection:send(encoded)

@@ -27,7 +27,7 @@ THE SOFTWARE.
 ]]--
 
 local path     = ... .. "."
-local cpml     = require "libs.cpml"
+local cpml     = require "cpml"
 local loader   = {
 	_LICENSE     = "Lua IQE Loader is distributed under the terms of the MIT license. See LICENSE.md.",
 	_URL         = "https://github.com/karai17/Lua-IQE-Loader",
@@ -194,7 +194,7 @@ end
 
 function IQE:load_texture(file, filter)
 	if not textures[file] and love.filesystem.isFile(file) then
-		textures[file] = love.graphics.newImage(file, {srgb=self.srgb and "srgb" or nil})
+		textures[file] = love.graphics.newImage(file, {srgb=self.srgb})
 		textures[file]:setFilter("linear", "linear", filter or 16)
 		textures[file]:setWrap("repeat", "repeat")
 	end

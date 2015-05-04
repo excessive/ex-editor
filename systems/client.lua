@@ -1,7 +1,7 @@
 local ffi          = require "ffi"
-local tiny         = require "libs.tiny"
-local cpml         = require "libs.cpml"
-local lube         = require "libs.lube"
+local tiny         = require "tiny"
+local cpml         = require "cpml"
+local lube         = require "lube"
 local Entity       = require "entity"
 local actions      = require "action_enum"
 local packet_types = require "packet_types"
@@ -69,6 +69,30 @@ return function(world)
 		end
 	end
 
+	function client_system:send_action_lock(target)
+		local data = {
+			type   = packets.client_action,
+			id     = self.client_id,
+			action = actions.lock,
+			target = target,
+		}
+		local struct  = cdata:set_struct("client_action", data)
+		local encoded = cdata:encode(struct)
+		self.connection:send(encoded)
+	end
+
+	function client_system:send_action_unlock(target)
+		local data = {
+			type   = packets.client_action,
+			id     = self.client_id,
+			action = actions.unlock,
+			target = target,
+		}
+		local struct  = cdata:set_struct("client_action", data)
+		local encoded = cdata:encode(struct)
+		self.connection:send(encoded)
+	end
+
 	function client_system:recv(data)
 		if data then
 			local header = cdata:decode("packet_type", data)
@@ -83,13 +107,31 @@ return function(world)
 		end
 	end
 
+	function client_system:recv_client_whois(data)
+		self.client_id = tonumber(data.id)
+		Signal.emit("client-network-id", self.client_id)
+	end
+
 	function client_system:recv_client_action(data)
-		if actions[action] then
-			local state = Gamestate:current()
-			state["action_"..actions[action]](state, id)
+		if actions[data.action] then
+			self["recv_action_"..actions[data.action]](self, data)
 		else
-			console.e("Invalid action: %d", action)
+			console.e("Invalid action: %d", data.action)
 		end
+	end
+
+	function client_system:recv_action_lock(data)
+		local entity  = self.cache[tonumber(data.target)]
+		entity.locked = tonumber(data.id)
+		self.world:removeEntity(entity)
+		self.world:addEntity(entity)
+	end
+
+	function client_system:recv_action_unlock(data)
+		local entity  = self.cache[tonumber(data.target)]
+		entity.locked = nil
+		self.world:removeEntity(entity)
+		self.world:addEntity(entity)
 	end
 
 	function client_system:recv_acquire_entities(data)
@@ -107,6 +149,7 @@ return function(world)
 		entity.real_position    = position
 		entity.real_orientation = orientation
 		entity.replicate        = true
+		entity.locked           = tonumber(data.locked) > 0 and tonumber(data.locked) or nil
 
 		self.world:addEntity(entity)
 		self.cache[entity.id] = entity
@@ -169,9 +212,11 @@ return function(world)
 		self.world:addEntity(entity)
 	end
 
-	Signal.register('client-connect',    function(...) client_system:connect(...) end)
-	Signal.register('client-disconnect', function(...) client_system:disconnect(...) end)
-	Signal.register('client-send',       function(...) client_system:send(...) end)
+	Signal.register('client-connect',       function(...) client_system:connect(...) end)
+	Signal.register('client-disconnect',    function(...) client_system:disconnect(...) end)
+	Signal.register('client-send',          function(...) client_system:send(...) end)
+	Signal.register('client-action-lock',   function(...) client_system:send_action_lock(...) end)
+	Signal.register('client-action-unlock', function(...) client_system:send_action_unlock(...) end)
 
 	return client_system
 end

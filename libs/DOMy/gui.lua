@@ -1,6 +1,5 @@
 local path     = (...):gsub('%.[^%.]+$', '') .. "."
-local initial  = require(path.."properties.initial")
-local patchy   = require(path.."thirdparty.patchy")
+local Display  = require(path.."properties.display")
 local lume     = require(path.."thirdparty.lume")
 local elements = {}
 local widgets  = {}
@@ -8,14 +7,17 @@ local GUI      = {}
 
 function GUI:init(width, height)
 	-- Load default elements
-	local element_path  = path:gsub("%.", "/") .. "elements/"
-	local element_files = love.filesystem.getDirectoryItems(element_path)
-
-	for _, file in ipairs(element_files) do
-		local name = file:sub(1, -5)
-		if file ~= "element.lua" and file:sub(-4) == ".lua" then
-			elements[name] = love.filesystem.load(element_path..file)(path)
-		end
+	local element_list = {
+		"block",
+		"button",
+		"image",
+		"inline",
+		"text",
+		"textfield",
+		"textinput"
+	}
+	for _, file in ipairs(element_list) do
+		elements[file] = require(path.."elements." .. file)
 	end
 
 	self._debug        = false
@@ -141,7 +143,9 @@ function GUI:new_element(element, parent, position)
 	end
 
 	-- If no element type is found, don't create that element
-	if not elements[element[1]] then return false end
+	if not elements[element[1]] then
+		return false
+	end
 
 	-- Create the element and insert it into the global elements list
 	local object = setmetatable({}, { __index = elements[element[1]] })
@@ -156,7 +160,39 @@ function GUI:new_element(element, parent, position)
 		table.insert(self.draw_order, object)
 	end
 
+	-- Apply any styles associated with element
+	object:apply_styles()
+
+	-- Apply position
+	local ep = object.properties
+	local d  = ep.display
+	local x  = 0
+	local y  = 0
+	local w  = self.width  - x
+	local h  = self.height - y
+
+	if self.parent then
+		d = "child"
+		x, y, w, h = self.parent:_get_position("content")
+	end
+
+	-- Parent box
+	local parent = {
+		x = x,
+		y = y,
+		w = w,
+		h = h,
+	}
+
+	object.visible = Display.get_visible(object)
+	Display[ep.display](object, d, x, y, 0, parent)
+
 	return object
+end
+
+function GUI:clear_styles()
+	self.styles = {}
+	self:resize()
 end
 
 function GUI:new_widget(widget)
@@ -166,7 +202,15 @@ end
 function GUI:bubble_event(element, event, ...)
 	local bubble = true
 
-	-- We only want to execute this once. If a child is entered, do not execute again
+	-- We only want to execute these once. If a child is entered, do not execute again
+	if event == "on_focus" then
+		if element.focus then
+			bubble = false
+		else
+			element.focus = true
+		end
+	end
+
 	if event == "on_mouse_enter" then
 		if element.entered then
 			bubble = false
@@ -176,14 +220,23 @@ function GUI:bubble_event(element, event, ...)
 	end
 
 	-- If a child is left, we may not have left the parent!
+	if event == "on_focus_leave" then
+		if element.focus and (not self.pseudo.focus or (self.pseudo.focus and not self.pseudo.focus:is_descendant(element))) then
+			element.focus = false
+		else
+			bubble = false
+		end
+	end
+
 	if event == "on_mouse_leave" then
-		if element.entered and not element:is_binding(love.mouse.getPosition()) then
+		if element.entered and (not self.pseudo.hover or (self.pseudo.hover and not self.pseudo.hover:is_descendant(element))) then
 			element.entered = false
 		else
 			bubble = false
 		end
 	end
 
+	-- Bubble events
 	if bubble and element[event] then
 		if ... then
 			bubble = element[event](element, unpack({ ... }))
@@ -192,7 +245,7 @@ function GUI:bubble_event(element, event, ...)
 		end
 	end
 
-	if bubble and element.parent then
+	if bubble ~= false and element.parent then
 		self:bubble_event(element.parent, event, ...)
 	end
 end
@@ -204,12 +257,14 @@ end
 function GUI:set_focus(element)
 	love.keyboard.setKeyRepeat(true)
 
-	if self.pseudo.focus then
-		self:bubble_event(self.pseudo.focus, "on_focus_leave")
-	end
-
+	local old_focus   = self.pseudo.focus
 	self.last_focus   = element
 	self.pseudo.focus = element
+
+	if old_focus then
+		self:bubble_event(old_focus, "on_focus_leave")
+	end
+
 	self:bubble_event(self.pseudo.focus, "on_focus")
 
 	return self.pseudo.focus
@@ -317,37 +372,74 @@ function GUI:get_widgets()
 end
 
 function GUI:process_widget(data, widget)
-	local function loop(element)
-		-- loop through children
+	local function loop(element, parent)
+		-- Convert class to table
+		if not element.class then
+			error("Widget elements must contain a valid class.")
+		elseif type(element.class) == "string" then
+			element.class = { element.class }
+		end
+
+		-- Loop through children
 		for k, child in ipairs(element) do
 			if type(child) == "table" then
-				-- apply data as needed
+				-- Convert class to table
+				if not child.class then
+					error("Widget elements must contain a valid class.")
+				elseif type(child.class) == "string" then
+					child.class = { child.class }
+				end
+
+				-- Insert elements
+				local class
+
 				for i, property in pairs(data) do
-					if element.class and child.class == element.class.."_"..i then
-						-- If a collection of elements
-						if type(property) == "table" and type(property[1]) ~= "string" then
-							for _, p in ipairs(property) do
-								table.insert(child, p)
+					temp = string.format("%s_%s", parent, i)
+					for _, c in ipairs(child.class) do
+						if c == temp then
+							class = temp
+
+							--if i ~= "class"
+							if i ~= "class" and type(property) == "table" then
+								if type(property[1]) == "string" then
+									-- An element
+									table.insert(child, property)
+								else
+									-- A collection of elements
+									for _, p in ipairs(property) do
+										table.insert(child, p)
+									end
+								end
+							else
+								child[i] = property
 							end
-						else
-							table.insert(child, property)
 						end
 					end
 				end
 
 				-- recursive loop
-				loop(child)
+				if class then
+					loop(child, class)
+				end
 			end
 		end
 	end
 
 	local container = self:new_widget(widget)
 
+	if type(container.class) == "string" then
+		container.class = { container.class }
+	end
+
+	if #container.class > 1 then
+		error("Container may only contain one class.")
+	end
+
 	if data.id then
 		container.id = data.id
 	end
 
-	loop(container)
+	loop(container, container.class[1])
 
 	return container
 end
@@ -532,272 +624,8 @@ function GUI:set_styles()
 end
 
 function GUI:apply_styles()
-	local function check_percent(element, value, axis)
-		if type(value) == "string" and value:sub(-1) == "%" then
-			value = tonumber(value:sub(1, -2)) / 100
-
-			if value then
-				local px = 0
-				local py = 0
-				local pw = self.width
-				local ph = self.height
-
-				if element.parent then
-					px, py, pw, ph = element.parent:_get_content_position()
-				end
-
-				if axis == "x" then
-					value = value * pw
-				elseif axis == "y" then
-					value = value * ph
-				end
-			end
-		end
-
-		return value
-	end
-
-	local function check_property(element, property, value, axis)
-		element.properties[property] = check_percent(element, value, axis)
-	end
-
-	local function check_vec2(element, property, value)
-		element.properties[property] = {
-			check_percent(element, value[1], "x"),
-			check_percent(element, value[2], "y"),
-		}
-	end
-
-	-- Expand margin/border/padding to longform
-	local function expand_box(element, property, value)
-		local ep     = element.properties
-		local top    = string.format("%s_top",    property)
-		local right  = string.format("%s_right",  property)
-		local bottom = string.format("%s_bottom", property)
-		local left   = string.format("%s_left",   property)
-
-		if type(value) == "number" or type(value) == "string" then
-			ep[top]    = check_percent(element, value, "y")
-			ep[right]  = check_percent(element, value, "x")
-			ep[bottom] = check_percent(element, value, "y")
-			ep[left]   = check_percent(element, value, "x")
-		elseif #value == 1 then
-			ep[top]    = check_percent(element, value[1], "y")
-			ep[right]  = check_percent(element, value[1], "x")
-			ep[bottom] = check_percent(element, value[1], "y")
-			ep[left]   = check_percent(element, value[1], "x")
-		elseif #value == 2 then
-			ep[top]    = check_percent(element, value[1], "y")
-			ep[right]  = check_percent(element, value[2], "x")
-			ep[bottom] = check_percent(element, value[1], "y")
-			ep[left]   = check_percent(element, value[2], "x")
-		else
-			ep[top]    = check_percent(element, value[1], "y")
-			ep[right]  = check_percent(element, value[2], "x")
-			ep[bottom] = check_percent(element, value[3], "y")
-			ep[left]   = check_percent(element, value[4], "x")
-		end
-	end
-
-	-- Expand border_color to longform
-	local function expand_border_color(element, value)
-		local ep     = element.properties
-		local top    = "border_top_color"
-		local right  = "border_right_color"
-		local bottom = "border_bottom_color"
-		local left   = "border_left_color"
-
-		if type(value[1]) == "number" then
-			ep[top]    = value
-			ep[right]  = value
-			ep[bottom] = value
-			ep[left]   = value
-		elseif #value == 1 then
-			ep[top]    = value[1]
-			ep[right]  = value[1]
-			ep[bottom] = value[1]
-			ep[left]   = value[1]
-		elseif #value == 2 then
-			ep[top]    = value[1]
-			ep[right]  = value[2]
-			ep[bottom] = value[1]
-			ep[left]   = value[2]
-		else
-			ep[top]    = value[1]
-			ep[right]  = value[2]
-			ep[bottom] = value[3]
-			ep[left]   = value[4]
-		end
-	end
-
-	-- Expand border_radius to longform
-	local function expand_border_radius(element, value)
-		local ep     = element.properties
-		local top    = "border_top_left_radius"
-		local right  = "border_top_right_radius"
-		local bottom = "border_bottom_right_radius"
-		local left   = "border_bottom_left_radius"
-
-		if type(value) == "number" then
-			ep[top]    = value
-			ep[right]  = value
-			ep[bottom] = value
-			ep[left]   = value
-		elseif #value == 1 then
-			ep[top]    = value[1]
-			ep[right]  = value[1]
-			ep[bottom] = value[1]
-			ep[left]   = value[1]
-		elseif #value == 2 then
-			ep[top]    = value[1]
-			ep[right]  = value[2]
-			ep[bottom] = value[1]
-			ep[left]   = value[2]
-		else
-			ep[top]    = value[1]
-			ep[right]  = value[2]
-			ep[bottom] = value[3]
-			ep[left]   = value[4]
-		end
-	end
-
-	-- Check all properties for special cases
-	local function set_property(element, property, value)
-		if not element then return end
-
-		local ep = element.properties
-		ep[property] = value
-
-		if property == "margin"  or
-		   property == "border"  or
-		   property == "padding" then
-			expand_box(element, property, value)
-		elseif property == "border_color" then
-			expand_border_color(element, value)
-		elseif property == "border_radius" then
-			expand_border_radius(element, value)
-		elseif property == "top"
-			or property == "bottom"
-			or property == "margin_top"
-			or property == "margin_bottom"
-			or property == "border_top"
-			or property == "border_bottom"
-			or property == "padding_top"
-			or property == "padding_bottom"
-			or property == "height"
-			or property == "min_height"
-			or property == "max_height" then
-				check_property(element, property, value, "y")
-		elseif property == "right"
-			or property == "left"
-			or property == "margin_right"
-			or property == "margin_left"
-			or property == "border_right"
-			or property == "border_left"
-			or property == "padding_right"
-			or property == "padding_left"
-			or property == "width"
-			or property == "min_width"
-			or property == "max_width" then
-				check_property(element, property, value, "x")
-		elseif property == "background_position"
-			or property == "background_size" then
-				check_vec2(element, property, value)
-		elseif property == "background_path" then
-			if not self:get_cache(value) then
-				if value:sub(-5) == "9.png" then
-					self:set_cache(value, patchy.load(value))
-				else
-					self:set_cache(value, love.graphics.newImage(value))
-				end
-			end
-
-			ep.background_image = self:get_cache(value)
-		elseif property == "font_path" then
-			local font_size = (element.custom_properties.font_size ~= "inherit" and element.custom_properties.font_size)
-				or (ep.font_size ~= "inherit" and ep.font_size)
-				or (element.default_properties.font_size ~= "inherit" and element.default_properties.font_size)
-				or initial.font_size
-
-			if not self:get_cache(value..font_size) then
-				if value == "default" then
-					self:set_cache(value..font_size, love.graphics.newFont(font_size))
-				else
-					self:set_cache(value..font_size, love.graphics.newFont(value, font_size))
-				end
-			end
-
-			ep.font = self:get_cache(value..font_size)
-		elseif property == "font_size" then
-			local font_path = (element.custom_properties.font_path ~= "inherit" and element.custom_properties.font_path)
-				or (ep.font_path ~= "inherit" and ep.font_path)
-				or (element.default_properties.font_path ~= "inherit" and element.default_properties.font_path)
-				or "default"
-
-			if not self:get_cache(font_path..value) then
-				if font_path == "default" then
-					self:set_cache(font_path..value, love.graphics.newFont(value))
-				else
-					self:set_cache(font_path..value, love.graphics.newFont(font_path, value))
-				end
-			end
-
-			ep.font = self:get_cache(font_path..value)
-		elseif property == "cursor" then
-			ep.cursor = love.mouse.getSystemCursor(value)
-		elseif property == "nav_up"
-			or property == "nav_right"
-			or property == "nav_down"
-			or property == "nav_left" then
-				ep[property] = self:get_element_by_id(value)
-		elseif property == "overflow" then
-			ep.overflow_x = value
-			ep.overflow_y = value
-
-			if value == "scroll" then
-				element.on_mouse_scrolled = element.default_on_mouse_scrolled
-			end
-		end
-	end
-
 	local function loop_elements(element)
-		local function check_value(element, property, value)
-			if value == "initial" then
-				value = initial[property] or value
-			end
-
-			if value == "inherit" then
-				if element.parent then
-					value = element.parent.properties[property] or nil
-				end
-			end
-
-			return value
-		end
-
-		for k in pairs(element.properties) do
-			element.properties[k] = nil
-		end
-
-		-- Apply default properties
-		for property, value in pairs(element.default_properties) do
-			value = check_value(element, property, value)
-			set_property(element, property, value)
-		end
-
-		-- Apply query properties
-		for _, style in ipairs(element.styles) do
-			for property, value in pairs(style) do
-				value = check_value(element, property, value)
-				set_property(element, property, value)
-			end
-		end
-
-		-- Apply custom properties
-		for property, value in pairs(element.custom_properties) do
-			value = check_value(element, property, value)
-			set_property(element, property, value)
-		end
+		element:apply_styles()
 
 		-- Apply styles to children
 		if #element.children > 0 then

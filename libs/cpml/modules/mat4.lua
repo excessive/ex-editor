@@ -139,7 +139,7 @@ function mat4:perspective(fovy, aspect, near, far)
 	assert(aspect ~= 0)
 	assert(near ~= far)
 
-	local t = math.tan(fovy / 2)
+	local t = math.tan(math.rad(fovy) / 2)
 	local result = mat4(
 		0, 0, 0, 0,
 		0, 0, 0, 0,
@@ -147,11 +147,11 @@ function mat4:perspective(fovy, aspect, near, far)
 		0, 0, 0, 0
 	)
 
-	result[1] = 1 / (aspect * t)
-	result[6] = 1 / t
-	result[11] = - (far + near) / (far - near)
-	result[12] = - 1
-	result[15] = - (2 * far * near) / (far - near)
+	result[1]  = 1 / (t * aspect)
+	result[6]  = 1 / t
+	result[11] = -(far + near) / (far - near)
+	result[12] = -1
+	result[15] = -(2 * far * near) / (far - near)
 
 	return result
 end
@@ -364,7 +364,7 @@ end
 -- https://github.com/g-truc/glm/blob/master/glm/gtc/matrix_transform.inl#L338
 -- Note: GLM calls the view matrix "model"
 function mat4.unproject(win, view, projection, viewport)
-	local inverse = (projection:transpose() * view:transpose()):invert()
+	local inverse = (view * projection):invert()
 	local position = { win.x, win.y, win.z, 1 }
 	position[1] = (position[1] - viewport[1]) / viewport[3]
 	position[2] = (position[2] - viewport[2]) / viewport[4]
@@ -429,7 +429,7 @@ end
 -- Multiply mat4 by a mat4. Tested OK
 function mat4:__mul(m)
 	if #m == 4 then
-		local tmp = matrix_mult_nxn(self:to_vec4s(), { {m[1]}, {m[2]}, {m[3]}, {m[4]} })
+		local tmp = matrix_mult_nxn(self:transpose():to_vec4s(), { {m[1]}, {m[2]}, {m[3]}, {m[4]} })
 		local v = {}
 		for i=1, 4 do
 			v[i] = tmp[i][1]

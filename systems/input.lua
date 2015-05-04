@@ -1,5 +1,5 @@
-local tiny = require "libs.tiny"
-local cpml = require "libs.cpml"
+local tiny = require "tiny"
+local cpml = require "cpml"
 
 return function(world)
 	local input_system  = tiny.processingSystem()
@@ -20,6 +20,10 @@ return function(world)
 		entity.velocity.x = 0
 		entity.velocity.y = 0
 		entity.velocity.z = 0
+
+		if console.visible then
+			return
+		end
 
 		down = love.keyboard.isDown
 		if down "d" or down "right" then

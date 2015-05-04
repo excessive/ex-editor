@@ -28,11 +28,14 @@ local console = {
 	_KEY_TOGGLE = "`",
 	_KEY_SUBMIT = "return",
 	_KEY_CLEAR = "escape",
-	_KEY_DELETE = "backspace",
+	_KEY_BACKSPACE = "backspace",
+	_KEY_DELETE = "delete",
 	_KEY_UP = "up",
 	_KEY_DOWN = "down",
 	_KEY_PAGEDOWN = "pagedown",
 	_KEY_PAGEUP = "pageup",
+	_KEY_CURSOR_LEFT = "left",
+	_KEY_CURSOR_RIGHT = "right",
 
 	visible = false,
 	delta = 0,
@@ -44,6 +47,7 @@ local console = {
 	font = nil,
 	firstLine = 0,
 	lastLine = 0,
+	cursor = 0,
 	input = "",
 	ps = "> ",
 	height_divisor = 3,
@@ -62,6 +66,87 @@ local console = {
 	-- entries to this table.
 	commands = {}
 }
+
+-- From: https://raw.githubusercontent.com/alexander-yakushev/awesompd/master/utf8.lua
+local utf8 = {}
+
+function utf8.charbytes (s, i)
+	-- argument defaults
+	i = i or 1
+	local c = string.byte(s, i)
+
+	-- determine bytes needed for character, based on RFC 3629
+	if c > 0 and c <= 127 then
+		-- UTF8-1
+		return 1
+	elseif c >= 194 and c <= 223 then
+		-- UTF8-2
+		local c2 = string.byte(s, i + 1)
+		return 2
+	elseif c >= 224 and c <= 239 then
+		-- UTF8-3
+		local c2 = s:byte(i + 1)
+		local c3 = s:byte(i + 2)
+		return 3
+	elseif c >= 240 and c <= 244 then
+		-- UTF8-4
+		local c2 = s:byte(i + 1)
+		local c3 = s:byte(i + 2)
+		local c4 = s:byte(i + 3)
+		return 4
+	end
+end
+
+-- returns the number of characters in a UTF-8 string
+function utf8.len (s)
+	local pos = 1
+	local bytes = string.len(s)
+	local len = 0
+	while pos <= bytes and len ~= chars do
+		local c = string.byte(s,pos)
+		len = len + 1
+
+		pos = pos + utf8.charbytes(s, pos)
+	end
+	if chars ~= nil then
+		return pos - 1
+	end
+	return len
+end
+
+-- functions identically to string.sub except that i and j are UTF-8 characters
+-- instead of bytes
+function utf8.sub(s, i, j)
+	j = j or -1
+	if i == nil then
+		return ""
+	end
+	local pos = 1
+	local bytes = string.len(s)
+	local len = 0
+	-- only set l if i or j is negative
+	local l = (i >= 0 and j >= 0) or utf8.len(s)
+	local startChar = (i >= 0) and i or l + i + 1
+	local endChar = (j >= 0) and j or l + j + 1
+	-- can't have start before end!
+	if startChar > endChar then
+		return ""
+	end
+	-- byte offsets to pass to string.sub
+	local startByte, endByte = 1, bytes
+	while pos <= bytes do
+		len = len + 1
+		if len == startChar then
+	 		startByte = pos
+		end
+		pos = pos + utf8.charbytes(s, pos)
+		if len == endChar then
+	 		endByte = pos - 1
+	 		break
+		end
+	end
+	return string.sub(s, startByte, endByte)
+end
 
 -- used to draw the arrows
 local function up(x, y, w)
@@ -173,11 +258,14 @@ function console.load(font, keyRepeat, inputCallback)
 	console.resize(love.graphics.getWidth(), love.graphics.getHeight())
 end
 
-function console.newHotkeys(toggle, submit, clear, delete)
+function console.newHotkeys(toggle, submit, clear, backspace, delete, left, right)
 	console._KEY_TOGGLE = toggle or console._KEY_TOGGLE
 	console._KEY_SUBMIT = submit or console._KEY_SUBMIT
 	console._KEY_CLEAR = clear or console._KEY_CLEAR
+	console._KEY_BACKSPACE = backspace or console._KEY_BACKSPACE
 	console._KEY_DELETE = delete or console._KEY_DELETE
+	console._KEY_CURSOR_LEFT = left or console._KEY_CURSOR_LEFT
+	console._KEY_CURSOR_RIGHT = right or console._KEY_CURSOR_RIGHT
 end
 
 function console.setMotd(message)
@@ -206,91 +294,13 @@ end
 
 function console.textinput(t)
 	if t ~= console._KEY_TOGGLE and console.visible then
-		console.input = console.input .. t
+		local text_l = utf8.sub(console.input, 1, console.cursor)
+		local text_r = utf8.sub(console.input, console.cursor+1, -1)
+		console.input = text_l .. t .. text_r
+		console.cursor = console.cursor + utf8.len(t)
 		return true
 	end
 	return false
-end
-
--- From: https://raw.githubusercontent.com/alexander-yakushev/awesompd/master/utf8.lua
-local utf8 = {}
-
-function utf8.charbytes (s, i)
-	-- argument defaults
-	i = i or 1
-	local c = string.byte(s, i)
-
-	-- determine bytes needed for character, based on RFC 3629
-	if c > 0 and c <= 127 then
-		-- UTF8-1
-		return 1
-	elseif c >= 194 and c <= 223 then
-		-- UTF8-2
-		local c2 = string.byte(s, i + 1)
-		return 2
-	elseif c >= 224 and c <= 239 then
-		-- UTF8-3
-		local c2 = s:byte(i + 1)
-		local c3 = s:byte(i + 2)
-		return 3
-	elseif c >= 240 and c <= 244 then
-		-- UTF8-4
-		local c2 = s:byte(i + 1)
-		local c3 = s:byte(i + 2)
-		local c4 = s:byte(i + 3)
-		return 4
-	end
-end
-
--- returns the number of characters in a UTF-8 string
-function utf8.len (s)
-	local pos = 1
-	local bytes = string.len(s)
-	local len = 0
-	while pos <= bytes and len ~= chars do
-		local c = string.byte(s,pos)
-		len = len + 1
-
-		pos = pos + utf8.charbytes(s, pos)
-	end
-	if chars ~= nil then
-		return pos - 1
-	end
-	return len
-end
-
--- functions identically to string.sub except that i and j are UTF-8 characters
--- instead of bytes
-function utf8.sub(s, i, j)
-	j = j or -1
-	if i == nil then
-		return ""
-	end
-	local pos = 1
-	local bytes = string.len(s)
-	local len = 0
-	-- only set l if i or j is negative
-	local l = (i >= 0 and j >= 0) or utf8.len(s)
-	local startChar = (i >= 0) and i or l + i + 1
-	local endChar = (j >= 0) and j or l + j + 1
-	-- can't have start before end!
-	if startChar > endChar then
-		return ""
-	end
-	-- byte offsets to pass to string.sub
-	local startByte, endByte = 1, bytes
-	while pos <= bytes do
-		len = len + 1
-		if len == startChar then
-	 		startByte = pos
-		end
-		pos = pos + utf8.charbytes(s, pos)
-		if len == endChar then
-	 		endByte = pos - 1
-	 		break
-		end
-	end
-	return string.sub(s, startByte, endByte)
 end
 
 function console.keypressed(key)
@@ -308,12 +318,27 @@ function console.keypressed(key)
 		if key == console._KEY_SUBMIT and not console.editBuffer then
 			local msg = console.input
 			if push_history() then
+				console.cursor = 0
 				console.inputCallback(msg)
 			end
 		elseif key == console._KEY_CLEAR then
+			console.cursor = 0
 			console.input = ""
-		elseif key == console._KEY_DELETE and not console.editBuffer then
-			console.input = utf8.sub(console.input, 1, utf8.len(console.input) - 1)
+		elseif key == console._KEY_BACKSPACE and not console.editBuffer then
+			local text_l = utf8.sub(console.input, 1, console.cursor-1)
+			local text_r = utf8.sub(console.input, console.cursor+1, -1)
+			console.input = text_l .. text_r
+			console.cursor = math.max(console.cursor - 1, 0)
+		elseif key == console._KEY_DELETE then
+			local text_l = utf8.sub(console.input, 1, console.cursor)
+			local text_r = utf8.sub(console.input, console.cursor+2, -1)
+			console.input = text_l .. text_r
+		end
+
+		-- TODO: Functable for multiple hotkeys on same action...
+		if ((love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl")) and key == "v") or
+		   ((love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")) and key == "insert") then
+			console.textinput(love.system.getClipboardText())
 		end
 
 		-- history traversal
@@ -329,6 +354,12 @@ function console.keypressed(key)
 					console.input = ""
 				end
 			end
+		end
+
+		if key == console._KEY_CURSOR_LEFT then
+			console.cursor = math.max(console.cursor - 1, 0)
+		elseif key == console._KEY_CURSOR_RIGHT then
+			console.cursor = math.min(console.cursor + 1, utf8.len(console.input))
 		end
 
 		if key == console._KEY_PAGEUP then
@@ -376,23 +407,30 @@ function console.draw()
 	color = console.colors.default
 	love.graphics.setColor(cc(color.r, color.g, color.b, color.a))
 	love.graphics.setFont(console.font)
-	local current = console.ps .. " " .. console.input
+	local prefix = console.ps .. " "
 	local x, y = console.x + console.margin, console.y + console.h + (console.lineHeight - console.fontSize) / 2 -1
+	love.graphics.print(prefix, x, y)
+	x = x + console.font:getWidth(prefix)
+
+	local current = console.input
 	local h = console.font:getHeight()
-	love.graphics.print(current, x, y)
-	local pos = console.font:getWidth(current)
-	local cursor_pos = pos
+	local text_l = utf8.sub(console.input, 1, console.cursor)
+	local text_r = utf8.sub(console.input, console.cursor+1, -1)
+	local cursor_pos = console.font:getWidth(text_l)
+	love.graphics.print(text_l, x, y)
 	if console.editBuffer then
+		local pos = console.font:getWidth(text_l)
 		local buf = console.editBuffer
 		local w = console.font:getWidth(buf.text)
 		local edit = console.colors.editing
-		cursor_pos = cursor_pos + w
 		love.keyboard.setTextInput(true, pos, y, w, h) -- NOTE: Added in Love 0.10
 		love.graphics.setColor(cc(edit.r, edit.g, edit.b, edit.a))
 		love.graphics.rectangle("fill", x + pos, y, w, h)
 		love.graphics.setColor(cc(color.r, color.g, color.b, color.a))
 		love.graphics.print(buf.text, x + pos, y)
+		x = x + console.font:getWidth(buf.text)
 	end
+	love.graphics.print(text_r, x + console.font:getWidth(text_l), y)
 	if math.floor(console.delta * 2) % 2 == 0 then
 		love.graphics.setColor(cc(color.r, color.g, color.b, color.a))
 	else
@@ -508,6 +546,7 @@ function console.e(fmt, ...)
 		str = string.format(fmt, ...)
 	end
 	a(str, 'E')
+	console.visible = true
 end
 
 function console.clearCommand(name)

@@ -37,7 +37,7 @@ varying vec2 f_uv_reflect;
 	}
 
 	mat3 getNormalMatrix(in mat4 deform_matrix) {
-		return mat3(deform_matrix * u_model);
+		return mat3(u_model * deform_matrix);
 	}
 
 	vec4 position(mat4 transform_projection, vec4 vertex_position) {
@@ -50,7 +50,7 @@ varying vec2 f_uv_reflect;
 
 		// This is confirmed fucked up on AMD 7970 - not sure what's up.
 		vec3 e = normalize(f_position);
-		vec3 n = normalize(getNormalMatrix(deform_matrix * u_view) * v_normal);
+		vec3 n = normalize(getNormalMatrix(u_view * deform_matrix) * v_normal);
 		vec3 r = reflect(e, n);
 		float m = 2.0 * sqrt(
 			pow(r.x, 2.0) +
