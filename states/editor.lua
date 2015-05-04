@@ -7,6 +7,7 @@ return function()
 	local state = {}
 	function state:enter()
 		self.grabbed = false
+		self.locked = {}
 
 		self.world = tiny.world()
 
@@ -53,12 +54,36 @@ return function()
 			return
 		end
 
+		if key == "x" or key == "delete" then
+			for k, entity in pairs(self.locked) do
+				self.world:removeEntity(entity)
+				self.locked[k] = nil
+				Signal.emit("client-send", { id = entity.id }, "despawn_entity")
+			end
+		end
+
+		if key == "g" then
+			if self.hit then
+				local picked = self.hit[1]
+				if picked.locked then
+					self.move_ready = true
+					print("can move")
+				end
+			end
+		end
+
 		self.gui_system.gui:keypressed(key, is_repeat)
 	end
 
 	function state:mousemoved(x, y, dx, dy)
 		self.dx = -dx
 		self.dy = -dy
+
+		if self.moving then
+			local hit = self.hit[1]
+			hit.position.x = hit.position.x + self.dx
+			hit.position.y = hit.position.y + self.dy
+		end
 
 		self.gui_system.gui:mousemoved(x, y, dx, dy)
 	end
@@ -68,23 +93,32 @@ return function()
 			love.mouse.setRelativeMode(false)
 			love.mouse.setPosition(self.restore_pos.x, self.restore_pos.y)
 		end
+		if self.moving then
+			self.moving = false
+		end
 		self.gui_system.gui:mousereleased(x, y, button)
 	end
 
 	function state:mousepressed(x, y, button)
 		-- here until we give inputsystem callbacks, I guess?
-		if button == 1 and self.hit then
+		if not self.move_ready and button == 1 and self.hit then
 			local picked = self.hit[1]
 
 			if picked.locked and picked.locked == self.client.client_id then
 				print("UNLOCKING")
 				Signal.emit("client-action-unlock", picked.id)
+				self.locked[picked.id] = nil
 			elseif not picked.locked then
 				print("LOCKING")
 				Signal.emit("client-action-lock", picked.id)
+				self.locked[picked.id] = picked
 			else
 				print("GET FUCKED")
 			end
+		end
+		if self.move_ready and button == 1 then
+			print("moving")
+			self.moving = true
 		end
 		if button == 2 then
 			love.mouse.setRelativeMode(true)

@@ -14,18 +14,22 @@ return function(camera)
 		else
 			x, y = love.mouse.getPosition()
 		end
-
+		local modelview = self.camera.view
+		local proj = self.camera.projection
+		local viewport = { 0, 0, w, h }
+		local ray = {
+			point     = cpml.mat4.unproject(cpml.vec3(x, h-y, 0), modelview, proj, viewport),
+			direction = cpml.mat4.unproject(cpml.vec3(x, h-y, 1), modelview, proj, viewport)
+		}
+		-- local plane = {
+		-- 	point = cpml.vec3(0, 0, 0),
+		-- 	normal = cpml.vec3(0, 0, 1)
+		-- }
+		-- print(cpml.intersect.ray_plane(ray, plane))
 		local highlighted = {}
 		for _, entity in ipairs(entities) do
 			local triangles = entity.bound_triangles
 			if triangles then
-				local modelview = self.camera.view
-				local proj = self.camera.projection
-				local viewport = { 0, 0, w, h }
-				local ray = {
-					point     = cpml.mat4.unproject(cpml.vec3(x, h-y, 0), modelview, proj, viewport),
-					direction = cpml.mat4.unproject(cpml.vec3(x, h-y, 1), modelview, proj, viewport)
-				}
 				for i = 1, #triangles, 3 do
 					local hit = cpml.intersect.ray_triangle(ray, { triangles[i], triangles[i+1], triangles[i+2] })
 					if hit then
